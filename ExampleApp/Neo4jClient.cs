@@ -94,7 +94,7 @@ public sealed class Neo4jClient : IAsyncDisposable
         bool logMeasures = false)
     {
         await using var session = driver.AsyncSession(x => x.WithDatabase(database));
-        using var measures = new TransactionMeasures { LogMeasures = logMeasures };
+        using var measures = new TransactionMeasures { LogMeasures = logMeasures, Write = write};
         var result = await (write
             ? session.ExecuteWriteAsync(tx => RunInTx<T>(tx, measures, query, parameters),
                 cfg => cfg.WithTimeout(WriteTimeout))
@@ -108,7 +108,7 @@ public sealed class Neo4jClient : IAsyncDisposable
         bool logMeasures = false)
     {
         await using var session = driver.AsyncSession(x => x.WithDatabase(database));
-        using var measures = new TransactionMeasures { LogMeasures = logMeasures };
+        using var measures = new TransactionMeasures { LogMeasures = logMeasures, Write = write };
 
         await (write
             ? session.ExecuteWriteAsync(tx => RunInTx(tx, measures, query, parameters))

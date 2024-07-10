@@ -9,6 +9,7 @@ internal class TransactionMeasures : IDisposable
     public int RetryCount = 0;
     public Stopwatch TotalTime = Stopwatch.StartNew();
     public bool LogMeasures { get; init; }
+    public bool Write { get; init; }
 
     public void Dispose()
     {
@@ -49,62 +50,76 @@ internal class ExecuteMeasures : IDisposable
     }
 }
 
+
 internal static class SystemMeasures
 {
-    public static long TxCount;
-    public static long TotalTime;
-    public static long BeginTime;
-    public static long Conversion;
-    public static long Query;
-    public static long Commit;
-    public static long Retried;
+    internal class ModeMeasures
+    {
+        public long TxCount;
+        public long TotalTime;
+        public long BeginTime;
+        public long Conversion;
+        public long Query;
+        public long Commit;
+        public long Retried;
+        public long MaxTotalTime;
+        public long MaxBeginTime;
+        public long MaxConversion;
+        public long MaxQuery;
+        public long MaxCommit;
+    }
 
-    public static long MaxTotalTime;
-    public static long MaxBeginTime;
-    public static long MaxConversion;
-    public static long MaxQuery;
-    public static long MaxCommit;
+    private static ModeMeasures Writes = new();
+    private static ModeMeasures Reads = new();
 
     internal static void Register(TransactionMeasures transactionMeasures)
     {
-        TxCount++;
-        TotalTime += transactionMeasures.TotalTime.ElapsedMilliseconds;
-        BeginTime += transactionMeasures.Begin.ElapsedMilliseconds;
-        Query += transactionMeasures.Query.ElapsedMilliseconds;
-        Conversion += transactionMeasures.Conversion.ElapsedMilliseconds;
-        Commit += transactionMeasures.Commit.ElapsedMilliseconds;
-        Retried += transactionMeasures.RetryCount > 0 ? 1 : 0;
+        var measures = transactionMeasures.Write ? Writes : Reads;
+        measures.TxCount++;
+        measures.TotalTime += transactionMeasures.TotalTime.ElapsedMilliseconds;
+        measures.BeginTime += transactionMeasures.Begin.ElapsedMilliseconds;
+        measures.Query += transactionMeasures.Query.ElapsedMilliseconds;
+        measures.Conversion += transactionMeasures.Conversion.ElapsedMilliseconds;
+        measures.Commit += transactionMeasures.Commit.ElapsedMilliseconds;
+        measures.Retried += transactionMeasures.RetryCount > 0 ? 1 : 0;
 
-        if (MaxTotalTime < transactionMeasures.TotalTime.ElapsedMilliseconds)
-            MaxTotalTime = transactionMeasures.TotalTime.ElapsedMilliseconds;
-        if (MaxBeginTime < transactionMeasures.Begin.ElapsedMilliseconds)
-            MaxBeginTime = transactionMeasures.Begin.ElapsedMilliseconds;
-        if (MaxConversion < transactionMeasures.Conversion.ElapsedMilliseconds)
-            MaxConversion = transactionMeasures.Conversion.ElapsedMilliseconds;
-        if (MaxQuery < transactionMeasures.Query.ElapsedMilliseconds)
-            MaxQuery = transactionMeasures.Query.ElapsedMilliseconds;
-        if (MaxCommit < transactionMeasures.Commit.ElapsedMilliseconds)
-            MaxCommit = transactionMeasures.Commit.ElapsedMilliseconds;
+        if (measures.MaxTotalTime < transactionMeasures.TotalTime.ElapsedMilliseconds) measures.MaxTotalTime = transactionMeasures.TotalTime.ElapsedMilliseconds;
+        if (measures.MaxBeginTime < transactionMeasures.Begin.ElapsedMilliseconds) measures.MaxBeginTime = transactionMeasures.Begin.ElapsedMilliseconds;
+        if (measures.MaxConversion < transactionMeasures.Conversion.ElapsedMilliseconds) measures.MaxConversion = transactionMeasures.Conversion.ElapsedMilliseconds;
+        if (measures.MaxQuery < transactionMeasures.Query.ElapsedMilliseconds) measures.MaxQuery = transactionMeasures.Query.ElapsedMilliseconds;
+        if (measures.MaxCommit < transactionMeasures.Commit.ElapsedMilliseconds) measures.MaxCommit = transactionMeasures.Commit.ElapsedMilliseconds;
     }
 
     public static void Log()
     {
+        if (Writes.TxCount != 0)
+        {
+            PrintMeasures(Writes);
+        }
+        if (Reads.TxCount != 0)
+        {
+            PrintMeasures(Reads);
+        }
+    }
+
+    private static void PrintMeasures(ModeMeasures measures)
+    {
         Console.WriteLine($"{Environment.NewLine}" +
-                          $"--Summary--{Environment.NewLine}" +
-                          $"Count      :{TxCount:D5}{Environment.NewLine}" +
-                          $"Retries    :{Retried:D5}{Environment.NewLine}" +
+                          $"--Reads Summary--{Environment.NewLine}" +
+                          $"Count      :{measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Retries    :{measures.Retried:D5}{Environment.NewLine}" +
                           $"--Averages-{Environment.NewLine}" +
-                          $"Tx Time    :{TotalTime / TxCount:D5}{Environment.NewLine}" +
-                          $"Begin      :{BeginTime / TxCount:D5}{Environment.NewLine}" +
-                          $"Query      :{Query / TxCount:D5}{Environment.NewLine}" +
-                          $"Conversion :{Conversion / TxCount:D5}{Environment.NewLine}" +
-                          $"Commit     :{Commit / TxCount:D5}{Environment.NewLine}" +
+                          $"Tx Time    :{measures.TotalTime / measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Begin      :{measures.BeginTime / measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Query      :{measures.Query / measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Conversion :{measures.Conversion / measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Commit     :{measures.Commit / measures.TxCount:D5}{Environment.NewLine}" +
                           $"----Max----{Environment.NewLine}" +
-                          $"Tx Time    :{MaxTotalTime:D5}{Environment.NewLine}" +
-                          $"Begin      :{MaxBeginTime:D5}{Environment.NewLine}" +
-                          $"Query      :{MaxQuery:D5}{Environment.NewLine}" +
-                          $"Conversion :{MaxConversion:D5}{Environment.NewLine}" +
-                          $"Commit     :{MaxCommit:D5}{Environment.NewLine}" +
+                          $"Tx Time    :{measures.MaxTotalTime:D5}{Environment.NewLine}" +
+                          $"Begin      :{measures.MaxBeginTime:D5}{Environment.NewLine}" +
+                          $"Query      :{measures.MaxQuery:D5}{Environment.NewLine}" +
+                          $"Conversion :{measures.MaxConversion:D5}{Environment.NewLine}" +
+                          $"Commit     :{measures.MaxCommit:D5}{Environment.NewLine}" +
                           $"-----------");
     }
 }
