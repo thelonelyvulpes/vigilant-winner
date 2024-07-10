@@ -10,6 +10,7 @@ internal class TransactionMeasures : IDisposable
     public Stopwatch TotalTime = Stopwatch.StartNew();
     public bool LogMeasures { get; init; }
     public bool Write { get; init; }
+    public bool MapLess { get; init; }
 
     public void Dispose()
     {
@@ -53,28 +54,27 @@ internal class ExecuteMeasures : IDisposable
 
 internal static class SystemMeasures
 {
-    internal class ModeMeasures
-    {
-        public long TxCount;
-        public long TotalTime;
-        public long BeginTime;
-        public long Conversion;
-        public long Query;
-        public long Commit;
-        public long Retried;
-        public long MaxTotalTime;
-        public long MaxBeginTime;
-        public long MaxConversion;
-        public long MaxQuery;
-        public long MaxCommit;
-    }
+    private static readonly ModeMeasures Writes = new();
+    private static readonly ModeMeasures Reads = new();
+    private static readonly ModeMeasures MaplessWrites = new();
+    private static readonly ModeMeasures MaplessReads = new();
 
-    private static ModeMeasures Writes = new();
-    private static ModeMeasures Reads = new();
 
     internal static void Register(TransactionMeasures transactionMeasures)
     {
-        var measures = transactionMeasures.Write ? Writes : Reads;
+        var measures = transactionMeasures.MapLess
+            ? transactionMeasures.Write
+                ? MaplessWrites
+                : MaplessReads
+            : transactionMeasures.Write
+                ? Writes
+                : Reads;
+
+        UpdateModeMeasure(transactionMeasures, measures);
+    }
+
+    private static void UpdateModeMeasure(TransactionMeasures transactionMeasures, ModeMeasures measures)
+    {
         measures.TxCount++;
         measures.TotalTime += transactionMeasures.TotalTime.ElapsedMilliseconds;
         measures.BeginTime += transactionMeasures.Begin.ElapsedMilliseconds;
@@ -83,29 +83,30 @@ internal static class SystemMeasures
         measures.Commit += transactionMeasures.Commit.ElapsedMilliseconds;
         measures.Retried += transactionMeasures.RetryCount > 0 ? 1 : 0;
 
-        if (measures.MaxTotalTime < transactionMeasures.TotalTime.ElapsedMilliseconds) measures.MaxTotalTime = transactionMeasures.TotalTime.ElapsedMilliseconds;
-        if (measures.MaxBeginTime < transactionMeasures.Begin.ElapsedMilliseconds) measures.MaxBeginTime = transactionMeasures.Begin.ElapsedMilliseconds;
-        if (measures.MaxConversion < transactionMeasures.Conversion.ElapsedMilliseconds) measures.MaxConversion = transactionMeasures.Conversion.ElapsedMilliseconds;
-        if (measures.MaxQuery < transactionMeasures.Query.ElapsedMilliseconds) measures.MaxQuery = transactionMeasures.Query.ElapsedMilliseconds;
-        if (measures.MaxCommit < transactionMeasures.Commit.ElapsedMilliseconds) measures.MaxCommit = transactionMeasures.Commit.ElapsedMilliseconds;
+        if (measures.MaxTotalTime < transactionMeasures.TotalTime.ElapsedMilliseconds)
+            measures.MaxTotalTime = transactionMeasures.TotalTime.ElapsedMilliseconds;
+        if (measures.MaxBeginTime < transactionMeasures.Begin.ElapsedMilliseconds)
+            measures.MaxBeginTime = transactionMeasures.Begin.ElapsedMilliseconds;
+        if (measures.MaxConversion < transactionMeasures.Conversion.ElapsedMilliseconds)
+            measures.MaxConversion = transactionMeasures.Conversion.ElapsedMilliseconds;
+        if (measures.MaxQuery < transactionMeasures.Query.ElapsedMilliseconds)
+            measures.MaxQuery = transactionMeasures.Query.ElapsedMilliseconds;
+        if (measures.MaxCommit < transactionMeasures.Commit.ElapsedMilliseconds)
+            measures.MaxCommit = transactionMeasures.Commit.ElapsedMilliseconds;
     }
 
     public static void Log()
     {
-        if (Writes.TxCount != 0)
-        {
-            PrintMeasures(Writes);
-        }
-        if (Reads.TxCount != 0)
-        {
-            PrintMeasures(Reads);
-        }
+        if (Writes.TxCount != 0) PrintMeasures(Writes, "Writes");
+        if (Reads.TxCount != 0) PrintMeasures(Reads, "Reads");
+        if (MaplessWrites.TxCount != 0) PrintConversionFreeMeasures(MaplessWrites, "Writes with no mapping");
+        if (MaplessReads.TxCount != 0) PrintConversionFreeMeasures(MaplessReads, "Reads with no mapping");
     }
 
-    private static void PrintMeasures(ModeMeasures measures)
+    private static void PrintMeasures(ModeMeasures measures, string name)
     {
         Console.WriteLine($"{Environment.NewLine}" +
-                          $"--Reads Summary--{Environment.NewLine}" +
+                          $"--{name} Summary--{Environment.NewLine}" +
                           $"Count      :{measures.TxCount:D5}{Environment.NewLine}" +
                           $"Retries    :{measures.Retried:D5}{Environment.NewLine}" +
                           $"--Averages-{Environment.NewLine}" +
@@ -121,5 +122,40 @@ internal static class SystemMeasures
                           $"Conversion :{measures.MaxConversion:D5}{Environment.NewLine}" +
                           $"Commit     :{measures.MaxCommit:D5}{Environment.NewLine}" +
                           $"-----------");
+    }
+
+    private static void PrintConversionFreeMeasures(ModeMeasures measures, string name)
+    {
+        Console.WriteLine($"{Environment.NewLine}" +
+                          $"--{name} Summary--{Environment.NewLine}" +
+                          $"Count      :{measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Retries    :{measures.Retried:D5}{Environment.NewLine}" +
+                          $"--Averages-{Environment.NewLine}" +
+                          $"Tx Time    :{measures.TotalTime / measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Begin      :{measures.BeginTime / measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Query      :{measures.Query / measures.TxCount:D5}{Environment.NewLine}" +
+                          $"Commit     :{measures.Commit / measures.TxCount:D5}{Environment.NewLine}" +
+                          $"----Max----{Environment.NewLine}" +
+                          $"Tx Time    :{measures.MaxTotalTime:D5}{Environment.NewLine}" +
+                          $"Begin      :{measures.MaxBeginTime:D5}{Environment.NewLine}" +
+                          $"Query      :{measures.MaxQuery:D5}{Environment.NewLine}" +
+                          $"Commit     :{measures.MaxCommit:D5}{Environment.NewLine}" +
+                          $"-----------");
+    }
+
+    internal class ModeMeasures
+    {
+        public long BeginTime;
+        public long Commit;
+        public long Conversion;
+        public long MaxBeginTime;
+        public long MaxCommit;
+        public long MaxConversion;
+        public long MaxQuery;
+        public long MaxTotalTime;
+        public long Query;
+        public long Retried;
+        public long TotalTime;
+        public long TxCount;
     }
 }

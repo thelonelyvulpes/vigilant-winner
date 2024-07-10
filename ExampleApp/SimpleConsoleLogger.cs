@@ -4,7 +4,7 @@ public class SimpleConsoleLogger : ILogger
 {
     public void Error(Exception cause, string message, params object[] args)
     {
-        Console.WriteLine(message, args);
+        Console.WriteLine(cause);
     }
 
     public void Warn(Exception cause, string message, params object[] args)

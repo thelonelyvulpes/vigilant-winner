@@ -2,6 +2,8 @@ using System.Diagnostics;
 using Neo4j.Driver;
 using Neo4j.Driver.Mapping;
 
+// ReSharper disable AccessToDisposedClosure
+
 public sealed class Neo4jClient : IAsyncDisposable
 {
     private readonly string database;
@@ -90,11 +92,11 @@ public sealed class Neo4jClient : IAsyncDisposable
     }
 
 
-    public async Task<List<T>> MeasuringTransactions<T>(string query, object parameters, bool write = false,
+    public async Task<List<T>> MeasuringTransactions<T>(string query, object? parameters, bool write = false,
         bool logMeasures = false)
     {
         await using var session = driver.AsyncSession(x => x.WithDatabase(database));
-        using var measures = new TransactionMeasures { LogMeasures = logMeasures, Write = write};
+        using var measures = new TransactionMeasures { LogMeasures = logMeasures, Write = write, MapLess = false };
         var result = await (write
             ? session.ExecuteWriteAsync(tx => RunInTx<T>(tx, measures, query, parameters),
                 cfg => cfg.WithTimeout(WriteTimeout))
@@ -104,11 +106,11 @@ public sealed class Neo4jClient : IAsyncDisposable
         return result;
     }
 
-    public async Task MeasuringTransactions(string query, object parameters, bool write = false,
+    public async Task MeasuringTransactions(string query, object? parameters, bool write = false,
         bool logMeasures = false)
     {
         await using var session = driver.AsyncSession(x => x.WithDatabase(database));
-        using var measures = new TransactionMeasures { LogMeasures = logMeasures, Write = write };
+        using var measures = new TransactionMeasures { LogMeasures = logMeasures, Write = write, MapLess = true };
 
         await (write
             ? session.ExecuteWriteAsync(tx => RunInTx(tx, measures, query, parameters))
@@ -117,7 +119,7 @@ public sealed class Neo4jClient : IAsyncDisposable
     }
 
     private async Task<List<T>> RunInTx<T>(IAsyncQueryRunner tx, TransactionMeasures transactionMeasures, string query,
-        object parameters)
+        object? parameters)
     {
         try
         {
@@ -147,7 +149,7 @@ public sealed class Neo4jClient : IAsyncDisposable
     }
 
     private async Task RunInTx(IAsyncQueryRunner tx, TransactionMeasures transactionMeasures, string query,
-        object parameters)
+        object? parameters)
     {
         try
         {
